@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "my-expo-app",
-    "slug": "my-expo-app",
+    "name": "LiveSync Hub",
+    "slug": "livesync-hub",
     "version": "1.0.0",
+    "scheme": "livesynchub",
 
     "web": {
       "favicon": "./assets/favicon.png"
