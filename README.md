@@ -154,5 +154,3 @@ Pull Request・Issue 受付中
 
 ## 📄 ライセンス  
 MIT License
-
----
