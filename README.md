@@ -1,5 +1,5 @@
 # 🐺 LiveSync Hub  
-SnakeWolf（https://snakewolf.com）が提供する  
+SnakeWolf（[https://snakewolf.com](https://snakewolf.com)）が提供する  
 **依存プラットフォーム × 参加型ライブ × コミュニティ特化アプリ**
 
 ---
