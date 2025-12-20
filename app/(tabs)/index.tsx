@@ -1,84 +1,38 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Link } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChatLog, Platform as PlatformType } from '@/types';
-import { getChatLogs } from '@/scripts/chat-engine';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 
-const platformIcons: Record<PlatformType, { name: string; color: string }> = {
-  YouTube: { name: 'play.rectangle.fill', color: '#FF0000' },
-  Twitch: { name: 'gamecontroller.fill', color: '#6441A5' },
-  TikTok: { name: 'music.note', color: '#000000' },
+// --- Mode Card Component ---
+
+type ModeCardProps = {
+  title: string;
+  description: string;
+  icon: React.ComponentProps<typeof IconSymbol>['name'];
+  href?: string;
+  disabled?: boolean;
 };
 
-// --- Dashboard Components ---
-
-const DashboardCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <View style={styles.card}>
-    <Text style={styles.cardTitle}>{title}</Text>
-    {children}
-  </View>
-);
-
-const ConnectionStatus = () => (
-  <DashboardCard title="Connection Status">
-    <View style={styles.statusContainer}>
-      {Object.entries(platformIcons).map(([platform, icon]) => (
-        <View key={platform} style={styles.statusItem}>
-          <IconSymbol name={icon.name} color={icon.color} size={24} />
-          <Text style={styles.statusText}>Connected</Text>
-        </View>
-      ))}
+const ModeCard = ({ title, description, icon, href, disabled }: ModeCardProps) => {
+  const cardContent = (
+    <View style={[styles.modeCard, disabled && styles.disabledCard]}>
+      <IconSymbol name={icon} size={32} color={disabled ? '#999' : Colors.common.color1} />
+      <Text style={[styles.modeTitle, disabled && styles.disabledText]}>{title}</Text>
+      <Text style={[styles.modeDescription, disabled && styles.disabledText]}>{description}</Text>
     </View>
-  </DashboardCard>
-);
-
-const ActiveEvents = () => (
-  <DashboardCard title="Active Events">
-    <Link href="/event" asChild>
-      <TouchableOpacity style={styles.eventButton}>
-        <Text style={styles.eventButtonText}>Go to Event Screen</Text>
-      </TouchableOpacity>
-    </Link>
-  </DashboardCard>
-);
-
-const ChatPreview = () => {
-  const [latestChats, setLatestChats] = useState<ChatLog[]>([]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const allLogs = getChatLogs();
-      setLatestChats(allLogs.slice(-3)); // Get latest 3
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <DashboardCard title="Chat Preview">
-      {latestChats.length > 0 ? latestChats.map((chat) => (
-        <View key={chat.id} style={styles.chatItem}>
-          <IconSymbol name={platformIcons[chat.platform].name} color={platformIcons[chat.platform].color} size={16} />
-          <Text style={styles.chatText} numberOfLines={1}>
-            <Text style={{fontWeight: 'bold'}}>{chat.user_name}:</Text> {chat.message}
-          </Text>
-        </View>
-      )) : <Text>No new messages.</Text>}
-    </DashboardCard>
   );
-};
 
-const AccountCard = () => {
-  const { logout } = useAuth();
+  if (disabled || !href) {
+    return cardContent;
+  }
+
   return (
-    <DashboardCard title="Account">
-      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </TouchableOpacity>
-    </DashboardCard>
+    <Link href={href} asChild>
+      <TouchableOpacity>{cardContent}</TouchableOpacity>
+    </Link>
   );
 };
 
@@ -86,6 +40,9 @@ const AccountCard = () => {
 // --- Main Screen ---
 
 export default function DashboardScreen() {
+  const { logout } = useAuth();
+  const userName = "Guest"; // Dummy user name
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -94,15 +51,37 @@ export default function DashboardScreen() {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      <ScrollView>
-        <View style={styles.content}>
-          <Text style={styles.headerTitle}>LiveSync Hub</Text>
-          <ConnectionStatus />
-          <ActiveEvents />
-          <ChatPreview />
-          <AccountCard />
-        </View>
-      </ScrollView>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>LiveSync Hub</Text>
+        <Text style={styles.welcomeText}>ようこそ、{userName}さん</Text>
+      </View>
+      
+      <View style={styles.content}>
+        <ModeCard
+          title="Liveモード"
+          description="Live参加コードを入力"
+          icon="play.display"
+          href="/join-live"
+        />
+        <ModeCard
+          title="会場モード"
+          description="会場アクセス端末の接続待機中"
+          icon="dot.radiowaves.up.forward"
+          disabled
+        />
+        <ModeCard
+          title="Normalモード"
+          description="動画コードを入力"
+          icon="film"
+          href="/join-normal"
+        />
+      </View>
+
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+          <Text style={styles.logoutButtonText}>ログアウト</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -110,75 +89,70 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'space-between',
   },
-  content: {
+  header: {
     padding: 20,
+    paddingTop: 40,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 20,
-    marginTop: 20,
+    marginBottom: 8,
   },
-  card: {
+  welcomeText: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modeCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
-  cardTitle: {
-    fontSize: 18,
+  disabledCard: {
+    backgroundColor: 'rgba(200, 200, 200, 0.7)',
+  },
+  modeTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginTop: 10,
     color: '#333',
   },
-  statusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statusItem: {
-    alignItems: 'center',
-  },
-  statusText: {
+  modeDescription: {
+    fontSize: 14,
+    color: '#666',
     marginTop: 5,
-    fontSize: 12,
-    color: '#3cb371'
   },
-  eventButton: {
-    backgroundColor: Colors.common.color1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+  disabledText: {
+    color: '#999',
   },
-  eventButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 5,
-  },
-  chatText: {
-    marginLeft: 8,
-    flexShrink: 1,
+  footer: {
+    padding: 20,
+    paddingBottom: 30,
   },
   logoutButton: {
-    backgroundColor: '#e74c3c',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
   },
   logoutButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });
