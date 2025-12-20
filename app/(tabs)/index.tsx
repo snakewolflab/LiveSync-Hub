@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
 import { Link } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ChatLog, Platform as PlatformType } from '@/types';
 import { getChatLogs } from '@/scripts/chat-engine';
-import { triggerNotificationHaptic } from '@/scripts/haptics';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 
 const platformIcons: Record<PlatformType, { name: string; color: string }> = {
   YouTube: { name: 'play.rectangle.fill', color: '#FF0000' },
@@ -13,106 +14,171 @@ const platformIcons: Record<PlatformType, { name: string; color: string }> = {
   TikTok: { name: 'music.note', color: '#000000' },
 };
 
-const ChatMessage = React.memo(({ item }: { item: ChatLog }) => {
-  const iconInfo = platformIcons[item.platform];
-  return (
-    <View style={styles.messageContainer}>
-      <IconSymbol name={iconInfo.name} color={iconInfo.color} size={20} />
-      <View style={styles.messageContent}>
-        <Text style={styles.userName}>{item.user_name}</Text>
-        <Text style={styles.messageText}>{item.message}</Text>
-      </View>
-    </View>
-  );
-});
+// --- Dashboard Components ---
 
-export default function IntegratedChatScreen() {
-  const [chatLogs, setChatLogs] = useState<ChatLog[]>([]);
-  const prevChatCountRef = useRef(chatLogs.length);
-  const flatListRef = useRef<FlatList>(null);
+const DashboardCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <View style={styles.card}>
+    <Text style={styles.cardTitle}>{title}</Text>
+    {children}
+  </View>
+);
+
+const ConnectionStatus = () => (
+  <DashboardCard title="Connection Status">
+    <View style={styles.statusContainer}>
+      {Object.entries(platformIcons).map(([platform, icon]) => (
+        <View key={platform} style={styles.statusItem}>
+          <IconSymbol name={icon.name} color={icon.color} size={24} />
+          <Text style={styles.statusText}>Connected</Text>
+        </View>
+      ))}
+    </View>
+  </DashboardCard>
+);
+
+const ActiveEvents = () => (
+  <DashboardCard title="Active Events">
+    <Link href="/event" asChild>
+      <TouchableOpacity style={styles.eventButton}>
+        <Text style={styles.eventButtonText}>Go to Event Screen</Text>
+      </TouchableOpacity>
+    </Link>
+  </DashboardCard>
+);
+
+const ChatPreview = () => {
+  const [latestChats, setLatestChats] = useState<ChatLog[]>([]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const newLogs = getChatLogs();
-      setChatLogs(newLogs);
-    }, 1000); // 1秒ごとにチャットを取得
-
+      const allLogs = getChatLogs();
+      setLatestChats(allLogs.slice(-3)); // Get latest 3
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (chatLogs.length > prevChatCountRef.current) {
-      triggerNotificationHaptic();
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }
-    prevChatCountRef.current = chatLogs.length;
-  }, [chatLogs]);
-
   return (
-    <View style={styles.container}>
-      <FlatList
-        ref={flatListRef}
-        data={chatLogs}
-        renderItem={({ item }) => <ChatMessage item={item} />}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContentContainer}
-        style={styles.list}
+    <DashboardCard title="Chat Preview">
+      {latestChats.length > 0 ? latestChats.map((chat) => (
+        <View key={chat.id} style={styles.chatItem}>
+          <IconSymbol name={platformIcons[chat.platform].name} color={platformIcons[chat.platform].color} size={16} />
+          <Text style={styles.chatText} numberOfLines={1}>
+            <Text style={{fontWeight: 'bold'}}>{chat.user_name}:</Text> {chat.message}
+          </Text>
+        </View>
+      )) : <Text>No new messages.</Text>}
+    </DashboardCard>
+  );
+};
+
+const AccountCard = () => {
+  const { logout } = useAuth();
+  return (
+    <DashboardCard title="Account">
+      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+        <Text style={styles.logoutButtonText}>Logout</Text>
+      </TouchableOpacity>
+    </DashboardCard>
+  );
+};
+
+
+// --- Main Screen ---
+
+export default function DashboardScreen() {
+  return (
+    <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={[Colors.common.color1, Colors.common.color2]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       />
-      <View style={styles.footer}>
-        <Link href="/event" asChild>
-          <TouchableOpacity style={styles.eventButton}>
-            <Text style={styles.eventButtonText}>参加型イベントはこちら</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-    </View>
+      <ScrollView>
+        <View style={styles.content}>
+          <Text style={styles.headerTitle}>LiveSync Hub</Text>
+          <ConnectionStatus />
+          <ActiveEvents />
+          <ChatPreview />
+          <AccountCard />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
-  list: {
-    flex: 1,
-  },
-  listContentContainer: {
-    padding: 10,
-  },
-  messageContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  messageContent: {
-    marginLeft: 10,
-    flex: 1,
-  },
-  userName: {
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  messageText: {
-    fontSize: 16,
-  },
-  footer: {
+  content: {
     padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 20,
+    marginTop: 20,
+  },
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statusItem: {
+    alignItems: 'center',
+  },
+  statusText: {
+    marginTop: 5,
+    fontSize: 12,
+    color: '#3cb371'
   },
   eventButton: {
     backgroundColor: Colors.common.color1,
-    padding: 15,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 8,
     alignItems: 'center',
   },
   eventButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  chatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  chatText: {
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  logoutButton: {
+    backgroundColor: '#e74c3c',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: 'bold',
   },
 });
