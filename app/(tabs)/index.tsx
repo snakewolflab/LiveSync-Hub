@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
 import { Link } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { startWaitingForRoomConnection } from '@/scripts/rooms';
 
 // --- Mode Card Component ---
 
@@ -13,26 +14,41 @@ type ModeCardProps = {
   description: string;
   icon: React.ComponentProps<typeof IconSymbol>['name'];
   href?: string;
+  onPress?: () => void;
   disabled?: boolean;
+  isLoading?: boolean; // New prop for loading state
 };
 
-const ModeCard = ({ title, description, icon, href, disabled }: ModeCardProps) => {
+const ModeCard = ({ title, description, icon, href, onPress, disabled, isLoading }: ModeCardProps) => {
   const cardContent = (
     <View style={[styles.modeCard, disabled && styles.disabledCard]}>
-      <IconSymbol name={icon} size={32} color={disabled ? '#999' : Colors.common.color1} />
+      {isLoading ? (
+        <ActivityIndicator size="large" color={Colors.common.color1} />
+      ) : (
+        <IconSymbol name={icon} size={32} color={disabled ? '#999' : Colors.common.color1} />
+      )}
       <Text style={[styles.modeTitle, disabled && styles.disabledText]}>{title}</Text>
       <Text style={[styles.modeDescription, disabled && styles.disabledText]}>{description}</Text>
     </View>
   );
 
-  if (disabled || !href) {
+  if (disabled && !onPress) { // If disabled and no onPress, it's just static content
     return cardContent;
   }
 
+  // If there's an href, use Link
+  if (href) {
+    return (
+      <Link href={href} asChild>
+        <TouchableOpacity disabled={disabled}>{cardContent}</TouchableOpacity>
+      </Link>
+    );
+  }
+  // Otherwise, use TouchableOpacity with onPress
   return (
-    <Link href={href} asChild>
-      <TouchableOpacity>{cardContent}</TouchableOpacity>
-    </Link>
+    <TouchableOpacity onPress={onPress} disabled={disabled}>
+      {cardContent}
+    </TouchableOpacity>
   );
 };
 
@@ -42,6 +58,21 @@ const ModeCard = ({ title, description, icon, href, disabled }: ModeCardProps) =
 export default function DashboardScreen() {
   const { logout } = useAuth();
   const userName = "Guest"; // Dummy user name
+  const [isConnectingToRoom, setIsConnectingToRoom] = useState(false);
+
+  const handleVenueMode = async () => {
+    setIsConnectingToRoom(true);
+    const dummyRoomId = "venue-123"; // Dummy room ID
+    const connected = await startWaitingForRoomConnection(dummyRoomId);
+    if (connected) {
+      Alert.alert("接続成功", `会場 ${dummyRoomId} に接続しました。`);
+      // Optionally navigate to a waiting room or session screen
+      // router.push({ pathname: '/session', params: { mode: 'Venue', roomName: dummyRoomId } });
+    } else {
+      Alert.alert("接続失敗", `会場 ${dummyRoomId} への接続に失敗しました。`);
+    }
+    setIsConnectingToRoom(false);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -65,15 +96,23 @@ export default function DashboardScreen() {
         />
         <ModeCard
           title="会場モード"
-          description="会場アクセス端末の接続待機中"
+          description={isConnectingToRoom ? "接続待機中..." : "会場アクセス端末の接続待機中"}
           icon="dot.radiowaves.up.forward"
-          disabled
+          onPress={handleVenueMode}
+          isLoading={isConnectingToRoom}
+          disabled={isConnectingToRoom}
         />
         <ModeCard
           title="Normalモード"
           description="動画コードを入力"
           icon="film"
           href="/join-normal"
+        />
+        <ModeCard
+          title="コミュニティ"
+          description="配信者・作品のファン空間"
+          icon="person.3.fill"
+          href="/community"
         />
       </View>
 

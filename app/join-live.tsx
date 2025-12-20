@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/theme';
@@ -8,6 +9,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 export default function JoinLiveScreen() {
   const router = useRouter();
   const [code, setCode] = useState('');
+  const insets = useSafeAreaInsets(); // Get insets
 
   const handleJoin = () => {
     if (code.trim().length === 0) {
@@ -22,7 +24,7 @@ export default function JoinLiveScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <LinearGradient
         colors={[Colors.common.color1, Colors.common.color2]}
         style={StyleSheet.absoluteFill}
@@ -30,7 +32,7 @@ export default function JoinLiveScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flexContainer}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <IconSymbol name="chevron.backward" size={24} color="#fff" />
           </TouchableOpacity>

@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics'; // Import Haptics
 import { ChatLog, Platform as PlatformType } from '@/types';
-import { getChatLogs } from '@/scripts/chat-engine';
-import { triggerNotificationHaptic } from '@/scripts/haptics';
+import { subscribeToLiveSync, unsubscribeFromLiveSync, getLiveChatLogs } from '@/scripts/livesync';
+import { scheduleOngoingNotification, cancelOngoingNotification } from '@/scripts/notifications';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 
@@ -31,29 +33,74 @@ export default function SessionScreen() {
   const router = useRouter();
   const { mode, roomName } = useLocalSearchParams<{ mode: string; roomName: string }>();
   const [chatLogs, setChatLogs] = useState<ChatLog[]>([]);
-  const prevChatCountRef = useRef(chatLogs.length);
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlatList<ChatLog>>(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [showScrollToBottomButton, setShowScrollToBottomButton] = useState(false);
+  const userScrolledAwayRef = useRef(false);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const newLogs = getChatLogs();
-      setChatLogs(newLogs);
-    }, 1000); // 1-second polling for new chats
+  // --- LiveSync Integration ---
+  useLayoutEffect(() => {
+    // Initial load of chat logs
+    setChatLogs(getLiveChatLogs());
 
-    return () => clearInterval(interval);
+    const onNewChat = (newChat: ChatLog) => {
+      setChatLogs((prevLogs) => {
+        const updatedLogs = [...prevLogs, newChat];
+        if (!userScrolledAwayRef.current) { // Only auto-scroll if user is at the bottom or hasn't scrolled away
+          flatListRef.current?.scrollToEnd({ animated: true });
+        } else {
+          setShowScrollToBottomButton(true); // Show button if new messages arrive and user scrolled up
+        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); // Haptic feedback for new message
+        return updatedLogs;
+      });
+    };
+
+    subscribeToLiveSync(roomName || 'default', onNewChat); // Subscribe to live updates
+
+    // Schedule ongoing notification
+    scheduleOngoingNotification(mode || '不明', roomName || '不明な部屋');
+
+    return () => {
+      unsubscribeFromLiveSync(onNewChat); // Unsubscribe on unmount
+      cancelOngoingNotification(); // Cancel notification on unmount
+    };
+  }, [mode, roomName]);
+
+  // --- Scroll Logic ---
+  const handleScroll = useCallback((event: any) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const isCloseToBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50; // 50px threshold
+    
+    if (userScrolledAwayRef.current && isCloseToBottom) {
+      userScrolledAwayRef.current = false;
+      setShowScrollToBottomButton(false);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); // Haptic feedback on reaching bottom
+    } else if (!isCloseToBottom) {
+      userScrolledAwayRef.current = true;
+    }
   }, []);
 
-  useEffect(() => {
-    if (chatLogs.length > prevChatCountRef.current) {
-      triggerNotificationHaptic();
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }
-    prevChatCountRef.current = chatLogs.length;
-  }, [chatLogs]);
+  const handleScrollEndDrag = useCallback(() => {
+    // User finished scrolling
+    setIsUserScrolling(false);
+  }, []);
+
+  const handleScrollBeginDrag = useCallback(() => {
+    // User started scrolling
+    setIsUserScrolling(true);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); // Haptic feedback on button press
+    setShowScrollToBottomButton(false);
+    userScrolledAwayRef.current = false;
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient colors={['#333', '#111']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['#333', Colors.common.color1]} style={StyleSheet.absoluteFill} />
       
       <View style={styles.sessionHeader}>
         <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
@@ -72,8 +119,17 @@ export default function SessionScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContentContainer}
         style={styles.list}
+        onScroll={handleScroll}
+        onScrollBeginDrag={handleScrollBeginDrag}
+        onScrollEndDrag={handleScrollEndDrag}
+        extraData={chatLogs.length} // Optimize re-renders
       />
-      {/* Footer for actions can be added here if needed */}
+
+      {showScrollToBottomButton && (
+        <TouchableOpacity style={styles.scrollToBottomButton} onPress={scrollToBottom}>
+          <IconSymbol name="arrow.down.circle.fill" size={30} color={Colors.common.color2} />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -131,5 +187,21 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     color: '#fff',
+  },
+  scrollToBottomButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#fff',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
